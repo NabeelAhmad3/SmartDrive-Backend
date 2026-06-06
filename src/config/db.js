@@ -28,16 +28,22 @@ require('dotenv').config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,      
+  connectionTimeoutMillis: 10000,
 });
 
-pool.connect((err) => {
+pool.on('error', (err) => {
+  console.error('Unexpected pool error:', err.message);
+});
+
+pool.connect((err, client, release) => {
   if (err) {
-    console.error('DB connection error:', err);
+    console.error('DB connection error:', err.message);
   } else {
     console.log('PostgreSQL connected successfully');
+    release();
   }
 });
 
