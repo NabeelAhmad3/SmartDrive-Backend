@@ -92,4 +92,18 @@ router.get('/overspeed/:userId', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/overspeed', auth, async (req, res) => {
+  const { tripId, speed, limitSet } = req.body;
+  try {
+    const result = await db.query(
+      `INSERT INTO speed_alerts (user_id, trip_id, speed, limit_set, timestamp)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [req.user.id, tripId, speed, limitSet, Date.now()]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error('Speed alert insert error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
 module.exports = router;
