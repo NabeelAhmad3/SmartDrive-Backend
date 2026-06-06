@@ -35,14 +35,19 @@ router.get('/trip/:tripId', auth, async (req, res) => {
 
 router.post('/point', auth, async (req, res) => {
   const { tripId, lat, lng, speed, timestamp } = req.body;
+
+  if (!tripId || lat === undefined || lng === undefined) {
+    return res.status(400).json({ error: 'tripId, lat, lng are required' });
+  }
   try {
     const result = await db.query(
       `INSERT INTO gps_points (trip_id, lat, lng, speed, timestamp)
        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [tripId, lat, lng, speed, timestamp]
+      [tripId, lat, lng, speed ?? 0, timestamp ?? Date.now()]
     );
     res.json(result.rows[0]);
   } catch (e) {
+    console.error('GPS point insert error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
