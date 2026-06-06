@@ -33,4 +33,18 @@ router.get('/trip/:tripId', auth, async (req, res) => {
   }
 });
 
+router.post('/point', auth, async (req, res) => {
+  const { tripId, lat, lng, speed, timestamp } = req.body;
+  try {
+    const result = await db.query(
+      `INSERT INTO gps_points (trip_id, lat, lng, speed, timestamp)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [tripId, lat, lng, speed, timestamp]
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
