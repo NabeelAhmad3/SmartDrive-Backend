@@ -1,14 +1,14 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const db = require('../config/db');
+const jwt    = require('jsonwebtoken');
+const db     = require('../config/db');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
   try {
-    const hash = await bcrypt.hash(password, 10);
+    const hash   = await bcrypt.hash(password, 10);
     const result = await db.query(
       'INSERT INTO users (name,email,password) VALUES ($1,$2,$3) RETURNING id,name,email',
       [name, email, hash]
@@ -22,7 +22,9 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const result = await db.query('SELECT * FROM users WHERE email=$1', [email]);
+    const result = await db.query(
+      'SELECT * FROM users WHERE email=$1', [email]
+    );
     const user = result.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found' });
     const match = await bcrypt.compare(password, user.password);
@@ -41,11 +43,13 @@ router.post('/login', async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await db.query(
+      'SELECT * FROM users WHERE email = $1', [email]
+    );
     const user = result.rows[0];
     if (!user) return res.json({ message: 'If email exists, reset link sent' });
 
-    const token = crypto.randomBytes(32).toString('hex');
+    const token     = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 3600000);
 
     await db.query(
@@ -53,38 +57,43 @@ router.post('/forgot-password', async (req, res) => {
       [token, expiresAt, email]
     );
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT),
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-    await transporter.sendMail({
-      from: `"SmartDrive" <${process.env.EMAIL_USER}>`,
-      to: email,
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const { data, error } = await resend.emails.send({
+      from:    'SmartDrive <onboarding@resend.dev>',
+      to:      [email],
       subject: 'SmartDrive — Password Reset',
       html: `
-        <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto">
+        <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:20px">
           <h2 style="color:#00D4FF">SmartDrive Password Reset</h2>
-          <p>Click the button below to reset your password:</p>
+          <p>Hello ${user.name || 'there'},</p>
+          <p>We received a request to reset your password. Click the button below:</p>
           <a href="${resetUrl}"
-             style="background:#00D4FF;color:white;padding:12px 24px;
-                    text-decoration:none;border-radius:8px;display:inline-block">
-            Reset Password
+             style="background:#00D4FF;color:white;padding:14px 28px;
+                    text-decoration:none;border-radius:8px;
+                    display:inline-block;margin:16px 0;font-weight:bold">
+            Reset My Password
           </a>
-          <p style="margin-top:16px;color:#666">This link expires in 1 hour.</p>
-          <p style="color:#666">If you did not request this, ignore this email.</p>
+          <p style="color:#666;font-size:14px">
+            This link expires in <strong>1 hour</strong>.
+          </p>
+          <p style="color:#666;font-size:14px">
+            If you did not request this, you can safely ignore this email.
+          </p>
+          <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
+          <p style="color:#999;font-size:12px">SmartDrive Tracking System</p>
         </div>
       `
     });
 
-    console.log('Reset email sent to:', email);
+    if (error) {
+      console.error('Resend error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    console.log('Reset email sent:', data);
     res.json({ message: 'If email exists, reset link sent' });
 
   } catch (e) {
@@ -105,10 +114,11 @@ router.post('/reset-password', async (req, res) => {
 
     const hash = await bcrypt.hash(newPassword, 10);
     await db.query(
-      `UPDATE users SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+      `UPDATE users SET password = $1,
+       reset_token = NULL, reset_token_expires = NULL
+       WHERE id = $2`,
       [hash, user.id]
     );
-
     res.json({ message: 'Password reset successful' });
   } catch (e) {
     res.status(500).json({ error: e.message });
