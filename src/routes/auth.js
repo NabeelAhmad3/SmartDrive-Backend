@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const crypto = require('crypto');
-const brevo = require('@getbrevo/brevo');
+const { TransactionalEmailsApi, SendSmtpEmail, TransactionalEmailsApiApiKeys } = require('@getbrevo/brevo');
 
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
@@ -58,10 +58,10 @@ router.post('/forgot-password', async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    apiInstance.authentications['apiKey'].apiKey = process.env.BREVO_API_KEY;
+    const apiInstance = new TransactionalEmailsApi();
+    apiInstance.setApiKey(TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    const sendSmtpEmail = new SendSmtpEmail();
     sendSmtpEmail.subject = 'SmartDrive - Password Reset';
     sendSmtpEmail.htmlContent = `
       <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:20px">
