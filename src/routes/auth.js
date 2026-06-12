@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const crypto = require('crypto');
-const { Resend } = require('resend');
+const SibApiV3Sdk = require('@getbrevo/brevo');
 
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
@@ -40,12 +40,11 @@ router.post('/login', async (req, res) => {
   }
 });
 
+
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   try {
-    const result = await db.query(
-      'SELECT * FROM users WHERE email = $1', [email]
-    );
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
     if (!user) return res.json({ message: 'If email exists, reset link sent' });
 
@@ -59,62 +58,32 @@ router.post('/forgot-password', async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-    // const { data, error } = await resend.emails.send({
-    //   from:    'SmartDrive <onboarding@resend.dev>',
-    //   to:      [email],
-    //   subject: 'SmartDrive — Password Reset',
-    //   html: `
-    //     <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:20px">
-    //       <h2 style="color:#00D4FF">SmartDrive Password Reset</h2>
-    //       <p>Hello ${user.name || 'there'},</p>
-    //       <p>We received a request to reset your password. Click the button below:</p>
-    //       <a href="${resetUrl}"
-    //          style="background:#00D4FF;color:white;padding:14px 28px;
-    //                 text-decoration:none;border-radius:8px;
-    //                 display:inline-block;margin:16px 0;font-weight:bold">
-    //         Reset My Password
-    //       </a>
-    //       <p style="color:#666;font-size:14px">
-    //         This link expires in <strong>1 hour</strong>.
-    //       </p>
-    //       <p style="color:#666;font-size:14px">
-    //         If you did not request this, you can safely ignore this email.
-    //       </p>
-    //       <hr style="border:none;border-top:1px solid #eee;margin:20px 0"/>
-    //       <p style="color:#999;font-size:12px">SmartDrive Tracking System</p>
-    //     </div>
-    //   `
-    // });
-    const { data, error } = await resend.emails.send({
-      from: 'SmartDrive <onboarding@resend.dev>',
-      to: ['nabeel.dev03@gmail.com'], 
-      subject: `SmartDrive — Password Reset for ${email}`,
-      html: `
-    <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:20px">
-      <p><strong>Reset requested for: ${email}</strong></p>
-      <h2 style="color:#00D4FF">SmartDrive Password Reset</h2>
-      <p>Click the button below to reset the password:</p>
-      <a href="${resetUrl}"
-         style="background:#00D4FF;color:white;padding:14px 28px;
-                text-decoration:none;border-radius:8px;
-                display:inline-block;margin:16px 0;font-weight:bold">
-        Reset My Password
-      </a>
-      <p style="color:#666;font-size:14px">Expires in 1 hour.</p>
-    </div>
-  `
-    });
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = 'SmartDrive - Password Reset';
+    sendSmtpEmail.htmlContent = `
+      <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:20px">
+        <h2 style="color:#00D4FF">SmartDrive Password Reset</h2>
+        <p>Hello ${user.name || 'there'},</p>
+        <p>We received a request to reset your password. Click below:</p>
+        <a href="${resetUrl}"
+           style="background:#00D4FF;color:white;padding:14px 28px;
+                  text-decoration:none;border-radius:8px;
+                  display:inline-block;margin:16px 0;font-weight:bold">
+          Reset My Password
+        </a>
+        <p style="color:#666;font-size:14px">This link expires in <strong>1 hour</strong>.</p>
+        <p style="color:#666;font-size:14px">If you did not request this, ignore this email.</p>
+      </div>
+    `;
+    sendSmtpEmail.sender = { name: 'SmartDrive', email: process.env.BREVO_SENDER_EMAIL };
+    sendSmtpEmail.to = [{ email: email, name: user.name || '' }];
 
-    if (error) {
-      console.error('Resend error:', error);
-      return res.status(500).json({ error: error.message });
-    }
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
 
-    console.log('Reset email sent:', data);
     res.json({ message: 'If email exists, reset link sent' });
-
   } catch (e) {
     console.error('Forgot password error:', e.message);
     res.status(500).json({ error: e.message });
