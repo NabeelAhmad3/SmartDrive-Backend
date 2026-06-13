@@ -106,4 +106,30 @@ router.post('/overspeed', auth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+router.get('/trips/:id/points', auth, async (req, res) => {
+  if (req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Admin only' });
+  try {
+    const result = await db.query(
+      `SELECT latitude, longitude, speed, recorded_at
+       FROM trip_points
+       WHERE trip_id = $1
+       ORDER BY recorded_at ASC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/drivers/active', auth, async (req, res) => {
+  if (req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Admin only' });
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT user_id FROM trips WHERE status = 'active'`
+    );
+    res.json(result.rows.map(r => r.user_id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 module.exports = router;
