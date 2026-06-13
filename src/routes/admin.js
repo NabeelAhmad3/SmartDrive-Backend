@@ -112,10 +112,10 @@ router.get('/trips/:id/points', auth, async (req, res) => {
     return res.status(403).json({ error: 'Admin only' });
   try {
     const result = await db.query(
-      `SELECT latitude, longitude, speed, recorded_at
-       FROM trip_points
+      `SELECT lat, lng, speed, timestamp
+       FROM gps_points
        WHERE trip_id = $1
-       ORDER BY recorded_at ASC`,
+       ORDER BY timestamp ASC`,
       [req.params.id]
     );
     res.json(result.rows);
