@@ -132,4 +132,22 @@ router.get('/drivers/active', auth, async (req, res) => {
     res.json(result.rows.map(r => r.user_id));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+router.get('/drivers/live', auth, async (req, res) => {
+  if (req.user.role !== 'admin')
+    return res.status(403).json({ error: 'Admin only' });
+  try {
+    const result = await db.query(
+      `SELECT DISTINCT ON (t.user_id)
+              t.user_id, u.name AS driver_name, t.id AS trip_id,
+              gp.lat, gp.lng, gp.speed, gp.timestamp
+       FROM trips t
+       JOIN users u ON u.id = t.user_id
+       JOIN gps_points gp ON gp.trip_id = t.id
+       WHERE t.status = 'active'
+       ORDER BY t.user_id, gp.timestamp DESC`
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 module.exports = router;
