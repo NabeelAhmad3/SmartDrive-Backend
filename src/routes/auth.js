@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const crypto = require('crypto');
 const SibApiV3Sdk = require('sib-api-v3-sdk');
+const auth = require('../middleware/auth');
 
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
@@ -110,6 +111,38 @@ router.post('/reset-password', async (req, res) => {
       [hash, user.id]
     );
     res.json({ message: 'Password reset successful' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/change-password', auth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password are required' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  try {
+    const result = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const match = await bcrypt.compare(currentPassword, user.password);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    const sameAsOld = await bcrypt.compare(newPassword, user.password);
+    if (sameAsOld) {
+      return res.status(400).json({ error: 'New password must be different from current password' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await db.query('UPDATE users SET password = $1 WHERE id = $2', [newHash, user.id]);
+
+    res.json({ message: 'Password updated successfully' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
